@@ -18,6 +18,7 @@ The grader:
 5. Captures printed output (stdout)
 6. Compares it with expected output
 7. Reports PASS / Wrong Answer / TLE / Runtime Error / Compilation Error
+8. Outputs the result to a Excel sheet
 
 ## ⚙️ Requirements
 

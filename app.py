@@ -1,10 +1,21 @@
 import subprocess
 import os
 import time
+import openpyxl
+from openpyxl import Workbook
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
+
+
+def extract_name_roll(filename: str):
+    name_part = Path(filename).stem  
+    if "_" not in name_part:
+        return name_part, "UNKNOWN"
+    
+    name, roll = name_part.split("_", 1)
+    return name, roll
 
 
 class TestStatus(Enum):
@@ -120,7 +131,8 @@ class AutoGrader:
         # For Java, extract class name
         if lang_config.extension == '.java':
             classname = Path(file_path).stem
-            run_cmd = [cmd.format(classname=classname) for cmd in run_cmd]
+            class_dir = str(Path(file_path).parent)
+            run_cmd = ['java', '-cp', class_dir, classname]
         elif lang_config.extension == '.py':
             run_cmd.append(file_path)
         
@@ -245,6 +257,80 @@ class AutoGrader:
             'total': total
         }
     
+    
+    def grade_folder(self, folder_path: str, test_cases: List[TestCase]):
+        all_results = []
+
+        for file in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, file)
+
+            if not os.path.isfile(file_path):
+                continue
+
+            lang = self.detect_language(file_path)
+            if not lang:
+                continue  # skip unsupported files
+
+            name, roll = extract_name_roll(file)
+
+            print(f"\nGrading: {file}")
+            result = self.grade(file_path, test_cases)
+
+            all_results.append({
+            "name": name,
+            "roll": roll,
+            "file": file,
+            "result": result
+            })
+
+        return all_results
+
+
+    def export_to_excel(self, all_results, output_file="results.xlsx"):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Grading Results"
+
+        # Header
+        ws.append([
+        "Name", "Roll No", "File",
+        "Total Tests", "Passed", "Score (%)",
+        "Status Summary"
+        ])
+
+        for entry in all_results:
+            result = entry["result"]
+
+            if "error" in result:
+                ws.append([
+                entry["name"], entry["roll"], entry["file"],
+                0, 0, 0, result["error"]
+                ])
+                continue
+
+            passed = result.get("passed", 0)
+            total = result.get("total", 0)
+            score = result.get("score", 0)
+
+            summary = ", ".join(
+            r.status.value for r in result["results"]
+            )
+
+            ws.append([
+            entry["name"],
+            entry["roll"],
+            entry["file"],
+            total,
+            passed,
+            round(score, 2),
+            summary
+            ])
+
+        wb.save(output_file)
+        print(f"\n✅ Excel report generated: {output_file}")
+
+    
+    
     def print_report(self, grading_result: Dict, file_path: str):
         """Print a detailed grading report"""
         print("\n" + "="*70)
@@ -299,17 +385,31 @@ if __name__ == "__main__":
     
     # Example test cases
     test_cases = [
-    TestCase(input_data="5\n1 2 3 4 5\n", expected_output="15"),
-    TestCase(input_data="3\n10 20 30\n", expected_output="60"),
-    TestCase(input_data="4\n-1 -2 -3 -4\n", expected_output="-10"),
+    TestCase(
+        input_data="5\n1 2 3 4 5\n",
+        expected_output="6"
+    ),
+    TestCase(
+        input_data="4\n-2 -1 0 3\n",
+        expected_output="-2"
+    ),
+    TestCase(
+        input_data="6\n10 15 20 25 30 35\n",
+        expected_output="60"
+    ),
 ]
 
     
     # Grade a student's code
-    student_file = "student_solution.py"  # or .c, .cpp, .java
+    #student_file = "student_solution.py"  # or .c, .cpp, .java
+    submissions_folder = "submissions"
+
+    if not os.path.exists(submissions_folder):
+        print("❌ submissions folder not found")
+        exit()
     
-    if os.path.exists(student_file):
-        result = grader.grade(student_file, test_cases)
-        grader.print_report(result, student_file)
-    else:
-        print(f"File {student_file} not found!")
+    all_results = grader.grade_folder(submissions_folder, test_cases)
+    for entry in all_results:
+        grader.print_report(entry["result"], entry["file"])
+    #grader.print_report(result, student_file)
+    grader.export_to_excel(all_results)
