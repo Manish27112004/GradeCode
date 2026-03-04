@@ -6,3 +6,5 @@ student_solution.java
 student_solution.class
 prog.exe
 submissions
+*.pyc
+*.xlsx

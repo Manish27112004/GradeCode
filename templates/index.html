@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AutoGrader</title>
+</head>
+
+<body>
+
+<h2>Enter Test Cases</h2>
+
+<form action="/grade" method="POST">
+
+<div id="testcases">
+
+<div class="testcase">
+<h4>Test Case</h4>
+
+<label>Input</label><br>
+<textarea name="input[]" rows="4" cols="50"></textarea><br><br>
+
+<label>Expected Output</label><br>
+<textarea name="output[]" rows="2" cols="50"></textarea><br><br>
+
+<button type="button" onclick="removeTestCase(this)">Remove</button>
+
+<hr>
+
+</div>
+
+</div>
+
+<br>
+
+<button type="button" onclick="addTestCase()">Add Test Case</button>
+
+<br><br>
+
+<button type="submit">Run Grader</button>
+
+</form>
+
+
+<script>
+
+function addTestCase(){
+
+let div = document.createElement("div");
+div.className = "testcase";
+
+div.innerHTML = `
+<h4>Test Case</h4>
+
+<label>Input</label><br>
+<textarea name="input[]" rows="4" cols="50"></textarea><br><br>
+
+<label>Expected Output</label><br>
+<textarea name="output[]" rows="2" cols="50"></textarea><br><br>
+
+<button type="button" onclick="removeTestCase(this)">Remove</button>
+
+<hr>
+`;
+
+document.getElementById("testcases").appendChild(div);
+
+renumberTestCases();
+
+}
+
+function removeTestCase(button){
+
+button.parentElement.remove();
+
+renumberTestCases();
+
+}
+
+function renumberTestCases(){
+
+let cases = document.querySelectorAll(".testcase");
+
+cases.forEach((tc, index) => {
+tc.querySelector("h4").innerText = "Test Case " + (index + 1);
+});
+
+}
+
+renumberTestCases();
+
+</script>
+
+</body>
+</html>

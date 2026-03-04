@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Results</title>
+</head>
+
+<body>
+
+<h2>Grading Results</h2>
+
+<table border="1">
+
+<tr>
+<th>Name</th>
+<th>Roll</th>
+<th>File</th>
+<th>Score</th>
+</tr>
+
+{% for entry in results %}
+
+<tr>
+
+<td>{{entry.name}}</td>
+<td>{{entry.roll}}</td>
+<td>{{entry.file}}</td>
+<td>{{entry.result.score}}</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+<br>
+
+<p>Excel report generated automatically.</p>
+
+</body>
+</html>
