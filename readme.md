@@ -19,6 +19,8 @@ The grader:
 6. Compares it with expected output
 7. Reports PASS / Wrong Answer / TLE / Runtime Error / Compilation Error
 8. Outputs the result to a Excel sheet
+9. Generates unique executables for each compiled submission
+10. Automatically cleans up generated `.exe` and `.class` files after grading
 
 ## ⚙️ Requirements
 
@@ -42,7 +44,7 @@ gcc --version
 g++ --version
 ```
 
-##This grader works for simple console (terminal) programs that follow this pattern:
+## Where This Grader Works Well
 
 1. Program starts
 2. Reads all required input from standard input (stdin)
@@ -69,7 +71,7 @@ The grader simulates a user typing input in the terminal and pressing Enter.
 
 
 ## Where This Grader Will NOT Work
-
+This grader is not designed for interactive, GUI-based, or continuously running applications.
 This grader will fail or hang for programs that:
 
 - Open GUI windows (Swing, JavaFX, Tkinter, etc.)
@@ -96,3 +98,14 @@ Examples that will NOT work:
    while(true) { ... }
 
 4) GUI apps that open a window instead of using the console
+
+```
+## Cleanup Behavior
+
+For compiled languages (C/C++/Java), the grader automatically:
+
+- Creates temporary compiled files for execution
+- Removes generated executables after grading
+- Removes generated Java `.class` files after grading
+
+This prevents stale binaries and keeps the submissions folder clean
