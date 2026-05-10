@@ -89,14 +89,27 @@ class AutoGrader:
         extension = Path(file_path).suffix.lower()
         return self.LANGUAGES.get(extension)
     
-    def compile_code(self, file_path: str, lang_config: LanguageConfig) -> Tuple[bool, str]:
-        """Compile the code if needed. Returns (success, error_message)"""
+    def compile_code(self, file_path: str, lang_config: LanguageConfig) -> Tuple[bool, str, Optional[str]]:
+        """Compile the code if needed. Returns (success, error_message, executable_path)"""
         if not lang_config.needs_compilation:
-            return True, ""
-        
+            return True, "", None
+
+        file_stem = Path(file_path).stem
+        file_dir = Path(file_path).parent
+
+        # Unique executable name
+        executable_name = f"{file_stem}_prog.exe"
+        executable_path = str(file_dir / executable_name)
+
         # Prepare compile command
         compile_cmd = [cmd.format(file=file_path) for cmd in lang_config.compile_cmd]
-        
+
+        # Replace default prog.exe with unique name
+        compile_cmd = [
+            executable_path if cmd == "prog.exe" else cmd
+            for cmd in compile_cmd
+        ]
+
         try:
             result = subprocess.run(
                 compile_cmd,
@@ -104,15 +117,15 @@ class AutoGrader:
                 text=True,
                 timeout=30  # 30 second compilation timeout
             )
-            
+
             if result.returncode != 0:
-                return False, result.stderr
-            return True, ""
-            
+                return False, result.stderr, None
+            return True, "", executable_path
+
         except subprocess.TimeoutExpired:
-            return False, "Compilation timeout"
+            return False, "Compilation timeout", None
         except Exception as e:
-            return False, str(e)
+            return False, str(e), None
     
     def normalize_output(self, output: str) -> str:
         """Normalize output by removing trailing spaces and newlines"""
@@ -122,12 +135,12 @@ class AutoGrader:
         # Join and remove trailing newlines
         return '\n'.join(lines).rstrip('\n')
     
-    def run_test_case(self, lang_config: LanguageConfig, file_path: str, 
-                      test_case: TestCase) -> TestResult:
+    def run_test_case(self, lang_config: LanguageConfig, file_path: str,
+                      test_case: TestCase, executable_path: Optional[str] = None) -> TestResult:
         """Run a single test case"""
         # Prepare run command
         run_cmd = lang_config.run_cmd.copy()
-        
+
         # For Java, extract class name
         if lang_config.extension == '.java':
             classname = Path(file_path).stem
@@ -135,6 +148,9 @@ class AutoGrader:
             run_cmd = ['java', '-cp', class_dir, classname]
         elif lang_config.extension == '.py':
             run_cmd.append(file_path)
+        elif executable_path:
+            # For compiled languages (C, C++), use the executable path
+            run_cmd = [executable_path]
         
         start_time = time.time()
         
@@ -204,7 +220,7 @@ class AutoGrader:
     
     def grade(self, file_path: str, test_cases: List[TestCase]) -> Dict:
         """Grade a student's code against test cases"""
-        
+
         # Detect language
         lang_config = self.detect_language(file_path)
         if not lang_config:
@@ -213,10 +229,11 @@ class AutoGrader:
                 'results': [],
                 'score': 0
             }
-        
+
         # Compile if needed
+        executable_path = None
         if lang_config.needs_compilation:
-            success, error_msg = self.compile_code(file_path, lang_config)
+            success, error_msg, executable_path = self.compile_code(file_path, lang_config)
             if not success:
                 # Return compilation error for all test cases
                 results = [
@@ -236,20 +253,23 @@ class AutoGrader:
                     'passed': 0,
                     'total': len(test_cases)
                 }
-        
+
         # Run test cases
         results = []
         for i, test_case in enumerate(test_cases):
             print(f"Running test case {i + 1}/{len(test_cases)}...", end=' ')
-            result = self.run_test_case(lang_config, file_path, test_case)
+            result = self.run_test_case(lang_config, file_path, test_case, executable_path)
             results.append(result)
             print(result.status.value)
-        
+
         # Calculate score
         passed = sum(1 for r in results if r.status == TestStatus.PASS)
         total = len(test_cases)
         score = (passed / total * 100) if total > 0 else 0
-        
+
+        # Clean up compiled files
+        self.cleanup_compiled_files(file_path, executable_path)
+
         return {
             'results': results,
             'score': score,
@@ -277,10 +297,10 @@ class AutoGrader:
             result = self.grade(file_path, test_cases)
 
             all_results.append({
-            "name": name,
-            "roll": roll,
-            "file": file,
-            "result": result
+                "name": name,
+                "roll": roll,
+                "file": file,
+                "result": result
             })
 
         return all_results
@@ -293,9 +313,9 @@ class AutoGrader:
 
         # Header
         ws.append([
-        "Name", "Roll No", "File",
-        "Total Tests", "Passed", "Score (%)",
-        "Status Summary"
+            "Name", "Roll No", "File",
+            "Total Tests", "Passed", "Score (%)",
+            "Status Summary"
         ])
 
         for entry in all_results:
@@ -303,8 +323,8 @@ class AutoGrader:
 
             if "error" in result:
                 ws.append([
-                entry["name"], entry["roll"], entry["file"],
-                0, 0, 0, result["error"]
+                    entry["name"], entry["roll"], entry["file"],
+                    0, 0, 0, result["error"]
                 ])
                 continue
 
@@ -313,23 +333,36 @@ class AutoGrader:
             score = result.get("score", 0)
 
             summary = ", ".join(
-            r.status.value for r in result["results"]
+                r.status.value for r in result["results"]
             )
 
             ws.append([
-            entry["name"],
-            entry["roll"],
-            entry["file"],
-            total,
-            passed,
-            round(score, 2),
-            summary
+                entry["name"],
+                entry["roll"],
+                entry["file"],
+                total,
+                passed,
+                round(score, 2),
+                summary
             ])
 
         wb.save(output_file)
         print(f"\n✅ Excel report generated: {output_file}")
 
-    
+    def cleanup_compiled_files(self, file_path: str, executable_path: Optional[str] = None):
+        try:
+            # Delete executable
+            if executable_path and os.path.exists(executable_path):
+                os.remove(executable_path)
+
+            # Delete Java .class file
+            if file_path.endswith(".java"):
+                class_file = Path(file_path).with_suffix(".class")
+                if class_file.exists():
+                    os.remove(class_file)
+
+        except Exception as e:
+            print(f"Cleanup warning: {e}")
     
     def print_report(self, grading_result: Dict, file_path: str):
         """Print a detailed grading report"""
